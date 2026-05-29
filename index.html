@@ -701,20 +701,76 @@ async function toggleScreen() {
   startScreenShare();
 }
 
+/* ===== ADAPTIVE QUALITY ===== */
+let qualityInterval = null;
+const QUALITY_LEVELS = [
+  { width:256,  height:144,  frameRate:8,  label:'144p' },
+  { width:426,  height:240,  frameRate:12, label:'240p' },
+  { width:640,  height:360,  frameRate:15, label:'360p' },
+  { width:854,  height:480,  frameRate:20, label:'480p' },
+];
+let currentQuality = 2; // 360p dan boshlash
+
+async function applyQuality(track, level) {
+  try {
+    await track.applyConstraints({
+      width:  { ideal: level.width },
+      height: { ideal: level.height },
+      frameRate: { ideal: level.frameRate }
+    });
+  } catch(e) {}
+}
+
+function startAdaptiveQuality(videoTrack) {
+  clearInterval(qualityInterval);
+  let lastBytesSent = 0;
+  let lastTime = Date.now();
+
+  qualityInterval = setInterval(async () => {
+    if (!screenCall || !screenCall.peerConnection) return;
+    const pc = screenCall.peerConnection;
+    try {
+      const stats = await pc.getStats();
+      let bytesSent = 0;
+      stats.forEach(s => {
+        if (s.type === 'outbound-rtp' && s.kind === 'video') bytesSent = s.bytesSent || 0;
+      });
+      const now = Date.now();
+      const elapsed = (now - lastTime) / 1000;
+      const kbps = ((bytesSent - lastBytesSent) * 8) / elapsed / 1000;
+      lastBytesSent = bytesSent; lastTime = now;
+
+      // Sifatni tezlikka qarab moslash
+      let targetLevel = currentQuality;
+      if (kbps > 800 && currentQuality < QUALITY_LEVELS.length - 1) targetLevel = currentQuality + 1;
+      else if (kbps < 200 && currentQuality > 0) targetLevel = currentQuality - 1;
+      else if (kbps < 400 && currentQuality > 1) targetLevel = currentQuality - 1;
+
+      if (targetLevel !== currentQuality) {
+        currentQuality = targetLevel;
+        await applyQuality(videoTrack, QUALITY_LEVELS[currentQuality]);
+        sysMsg('📶 Sifat: ' + QUALITY_LEVELS[currentQuality].label);
+      }
+    } catch(e) {}
+  }, 4000);
+}
+
 async function startScreenShare() {
   try {
     localScreenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate:15, cursor:'always' },
-      audio: { echoCancellation: false, noiseSuppression: false, sampleRate: 44100 }
+      video: {
+        width:  { ideal: 854,  max: 854 },
+        height: { ideal: 480,  max: 480 },
+        frameRate: { ideal: 15, max: 20 },
+        cursor: 'always'
+      },
+      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 }
     });
-    
-    // Add mic audio track to screen stream so voice is heard on receiver side too
-    if (localStream && localStream.getAudioTracks().length > 0) {
-      localStream.getAudioTracks().forEach(track => {
-        try { localScreenStream.addTrack(track); } catch(e) {}
-      });
-    }
+
+    // Echo muammosi: mic audiosi FAQAT alohida ovozli qo'ng'iroq orqali ketadi.
+    // Ekran streamiga mic qo'shilmaydi — shunday qilib echo yo'qoladi.
     isSharing = true;
+    currentQuality = 2;
     const sb = document.getElementById('screenBtn');
     sb.classList.add('sharing'); sb.textContent='🛑';
 
@@ -725,15 +781,21 @@ async function startScreenShare() {
     document.getElementById('screenArea').classList.add('show');
     document.getElementById('screenLabel').textContent = '🖥️ Sizning ekraningiz';
 
-    // Call peer with screen stream
-    screenCall = peer.call(theirId(), localScreenStream, {metadata:{type:'screen'}});
+    // Call peer with screen stream (audio yo'q — echo oldini olish)
+    const videoOnlyStream = new MediaStream(localScreenStream.getVideoTracks());
+    screenCall = peer.call(theirId(), videoOnlyStream, {metadata:{type:'screen'}});
     screenCall.on('stream', () => {});
     screenCall.on('close', () => { if (isSharing) stopScreenShare(); });
 
-    // Handle user stopping share from browser UI
-    localScreenStream.getVideoTracks()[0].onended = () => stopScreenShare();
+    // Adaptiv sifat boshlash
+    const vTrack = localScreenStream.getVideoTracks()[0];
+    await applyQuality(vTrack, QUALITY_LEVELS[currentQuality]);
+    startAdaptiveQuality(vTrack);
 
-    sysMsg("Ekran ulashish boshlandi 🖥️");
+    // Handle user stopping share from browser UI
+    vTrack.onended = () => stopScreenShare();
+
+    sysMsg("Ekran ulashish boshlandi 🖥️ (sifat: " + QUALITY_LEVELS[currentQuality].label + ")");
   } catch(e) {
     if (e.name !== 'NotAllowedError') sysMsg("⚠️ Ekran ulashishda xato.");
   }
@@ -741,9 +803,9 @@ async function startScreenShare() {
 
 function stopScreenShare() {
   isSharing = false;
+  clearInterval(qualityInterval); qualityInterval = null;
   if (localScreenStream) {
-    // Only stop video tracks, not mic audio tracks (they belong to localStream)
-    localScreenStream.getVideoTracks().forEach(t=>t.stop());
+    localScreenStream.getTracks().forEach(t=>t.stop());
     localScreenStream=null;
   }
   if (screenCall) { try{screenCall.close();}catch(e){} screenCall=null; }
@@ -762,15 +824,12 @@ function stopScreenShare() {
 function acceptScreen() {
   document.getElementById('incomingScreenBanner').classList.remove('show');
   if (!pendingScreen) return;
-  // Answer with our mic stream so our voice is heard on sharer's side
-  const answerStream = localStream || new MediaStream();
-  pendingScreen.answer(answerStream);
+  // Bo'sh stream bilan javob — ovoz alohida qo'ng'iroq orqali ketadi (echo yo'q)
+  pendingScreen.answer(new MediaStream());
   pendingScreen.on('stream', remoteStream => {
     const rv = document.getElementById('remoteScreen');
     rv.srcObject = remoteStream;
-    // Play audio from screen share stream (computer audio + sharer's mic)
-    const screenAudio = document.getElementById('screenAudio');
-    screenAudio.srcObject = remoteStream;
+    // Ekran streamidan audio o'ynatilmaydi — ovoz faqat remoteAudio dan keladi
     document.getElementById('screenArea').classList.add('show');
     document.getElementById('screenLabel').textContent = '📺 U tomonning ekrani';
     sysMsg("Ekran ulashish qabul qilindi 🖥️");
