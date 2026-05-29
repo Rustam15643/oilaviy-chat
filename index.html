@@ -45,7 +45,7 @@ body {
   padding: 14px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.08);
   display: flex; align-items: center; gap: 10px; flex-shrink: 0;
 }
-.avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
 .header-info { flex: 1; }
 .header-name { font-size: 16px; font-weight: 600; }
 .header-status { font-size: 12px; color: #7a8fa0; margin-top: 1px; display: flex; align-items: center; gap: 5px; }
@@ -123,9 +123,9 @@ body {
   font-size: 19px; cursor: pointer; transition: background 0.15s; flex-shrink: 0;
 }
 .icon-btn:disabled { opacity: 0.35; cursor: default; }
-.btn-call { background: #1a2535; color: #e8edf2; }
+.btn-call { background: #1a9e72; color: #fff; }
 .btn-call.calling { background: #c0392b; }
-.btn-screen { background: #1a2535; color: #e8edf2; }
+.btn-screen { background: #1a4a72; color: #fff; }
 .btn-screen.sharing { background: #7c3aed; }
 .msg-input {
   flex: 1; background: #1a2535; border: 1px solid rgba(255,255,255,0.1);
@@ -329,7 +329,7 @@ body {
   </div>
 
   <div class="header">
-    <div class="avatar" id="headerAvatar">🇷🇺</div>
+    <div id="headerAvatar" style="font-size:28px;flex-shrink:0;line-height:1">🇷🇺</div>
     <div class="header-info">
       <div class="header-name" id="headerName">Rossiyadaman</div>
       <div class="header-status">
