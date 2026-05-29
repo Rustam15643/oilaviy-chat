@@ -768,7 +768,7 @@ async function startScreenShare() {
     });
 
     // Echo muammosi: mic audiosi FAQAT alohida ovozli qo'ng'iroq orqali ketadi.
-    // Ekran streamiga mic qo'shilmaydi — shunday qilib echo yo'qoladi.
+    // Faqat kompyuter/sistema ovozi (YouTube, video) ekran streamiga qo'shiladi.
     isSharing = true;
     currentQuality = 2;
     const sb = document.getElementById('screenBtn');
@@ -781,8 +781,9 @@ async function startScreenShare() {
     document.getElementById('screenArea').classList.add('show');
     document.getElementById('screenLabel').textContent = '🖥️ Sizning ekraningiz';
 
-    // Call peer with screen stream (audio yo'q — echo oldini olish)
-    const videoOnlyStream = new MediaStream(localScreenStream.getVideoTracks());
+    // Video + sistema ovozi (mic EMAS) — echo yo'q
+    const screenTracks = [...localScreenStream.getVideoTracks(), ...localScreenStream.getAudioTracks()];
+    const videoOnlyStream = new MediaStream(screenTracks);
     screenCall = peer.call(theirId(), videoOnlyStream, {metadata:{type:'screen'}});
     screenCall.on('stream', () => {});
     screenCall.on('close', () => { if (isSharing) stopScreenShare(); });
@@ -829,7 +830,10 @@ function acceptScreen() {
   pendingScreen.on('stream', remoteStream => {
     const rv = document.getElementById('remoteScreen');
     rv.srcObject = remoteStream;
-    // Ekran streamidan audio o'ynatilmaydi — ovoz faqat remoteAudio dan keladi
+    // Sistema ovozini (YouTube, video) screenAudio orqali o'ynat
+    // Mic ovozi remoteAudio dan keladi — echo yo'q
+    const screenAudio = document.getElementById('screenAudio');
+    screenAudio.srcObject = remoteStream;
     document.getElementById('screenArea').classList.add('show');
     document.getElementById('screenLabel').textContent = '📺 U tomonning ekrani';
     sysMsg("Ekran ulashish qabul qilindi 🖥️");
