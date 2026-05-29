@@ -76,11 +76,30 @@ body {
   background: rgba(0,0,0,0.6); color: #fff;
   font-size: 11px; padding: 3px 8px; border-radius: 10px;
 }
-.q-opt {
-  padding: 9px 18px; color: #fff; font-size: 13px;
-  cursor: pointer; white-space: nowrap; transition: background 0.1s;
+#remoteScreen { image-rendering: crisp-edges; }
+#qualityMenu {
+  display: none; position: absolute; bottom: 40px; left: 8px;
+  background: rgba(10,15,25,0.95); border-radius: 10px;
+  overflow: hidden; z-index: 202; min-width: 100px;
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
-.q-opt:hover, .q-opt.active { background: #1a9e72; }
+#qualityMenu.open { display: block; }
+.q-opt {
+  padding: 10px 18px; color: #ccc; font-size: 13px; font-weight: 500;
+  cursor: pointer; white-space: nowrap; transition: background 0.1s;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.q-opt:last-child { border-bottom: none; }
+.q-opt:hover { background: rgba(26,158,114,0.3); color: #fff; }
+.q-opt.active { background: #1a9e72; color: #fff; font-weight: 700; }
+#qualityBtn {
+  position: absolute; bottom: 8px; left: 8px;
+  background: rgba(0,0,0,0.7); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600;
+  cursor: pointer; z-index: 202; transition: background 0.15s;
+}
+#qualityBtn:hover { background: rgba(26,158,114,0.8); }
 
 .call-banner {
   background: #0d2e20; border-bottom: 1px solid rgba(26,158,114,0.3);
@@ -351,8 +370,8 @@ body {
     <video id="remoteScreen" autoplay playsinline muted></video>
     <video id="localScreenThumb" autoplay playsinline muted></video>
     <div class="screen-label" id="screenLabel">📺 Ekran</div>
-    <div id="qualityMenu" style="display:none;position:absolute;bottom:38px;left:8px;background:rgba(0,0,0,0.85);border-radius:10px;overflow:hidden;z-index:202;min-width:90px;"></div>
-    <button id="qualityBtn" onclick="toggleQualityMenu()" style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.65);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;z-index:202;">&#9881; Avto</button>
+    <div id="qualityMenu"></div>
+    <button id="qualityBtn" onclick="toggleQualityMenu()">&#9881; Avto</button>
   <button id="fullscreenBtn" onclick="toggleFullscreen()" title="Kattalashtirish">&#x26F6;</button>
   <button id="exitFsBtn" onclick="toggleFullscreen()" title="Kichraytirish">&#x2715;</button>
   </div>
@@ -702,97 +721,124 @@ function showCallUI() {
   }, 1000);
 }
 
-/* ===== ADAPTIVE QUALITY ===== */
-let qualityInterval = null;
-let isAutoQuality = true;
+/* ===== QUALITY SELECTOR ===== */
 const QUALITY_LEVELS = [
-  { width:256,  height:144,  frameRate:8,  label:'144p' },
-  { width:426,  height:240,  frameRate:12, label:'240p' },
-  { width:640,  height:360,  frameRate:15, label:'360p' },
-  { width:854,  height:480,  frameRate:20, label:'480p' },
+  { w:256,  h:144,  fps:8,  label:'144p'  },
+  { w:426,  h:240,  fps:12, label:'240p'  },
+  { w:640,  h:360,  fps:15, label:'360p'  },
+  { w:854,  h:480,  fps:20, label:'480p'  },
+  { w:1280, h:720,  fps:24, label:'720p'  },
+  { w:1920, h:1080, fps:30, label:'1080p' },
 ];
-let currentQuality = 2;
-
-async function applyQuality(track, level) {
-  try {
-    await track.applyConstraints({
-      width: { ideal: level.width }, height: { ideal: level.height }, frameRate: { ideal: level.frameRate }
-    });
-  } catch(e) {}
-}
-
-function updateQualityBtn() {
-  const btn = document.getElementById('qualityBtn');
-  if (!btn) return;
-  btn.innerHTML = '&#9881; ' + (isAutoQuality ? 'Avto' : QUALITY_LEVELS[currentQuality].label);
-  document.querySelectorAll('.q-opt').forEach(el => {
-    const q = parseInt(el.dataset.q);
-    el.classList.toggle('active', isAutoQuality ? q === -1 : q === currentQuality);
-  });
-}
+let currentQuality = 2; // 360p boshlang'ich
+let isAutoQuality = true;
+let qualityInterval = null;
 
 function buildQualityMenu() {
   const menu = document.getElementById('qualityMenu');
-  if (!menu) return;
   menu.innerHTML = '';
-  [{q:-1,label:'Avto'},{q:0,label:'144p'},{q:1,label:'240p'},{q:2,label:'360p'},{q:3,label:'480p'}].forEach(o => {
+  [{idx:-1,label:'Avto'}, ...QUALITY_LEVELS.map((q,i)=>({idx:i,label:q.label}))].forEach(o => {
     const d = document.createElement('div');
-    d.className = 'q-opt'; d.dataset.q = o.q; d.textContent = o.label;
-    d.onclick = () => setQualityManual(o.q);
+    d.className = 'q-opt';
+    d.dataset.idx = o.idx;
+    d.textContent = o.label;
+    if (o.idx === -1 && isAutoQuality) d.classList.add('active');
+    if (o.idx !== -1 && !isAutoQuality && o.idx === currentQuality) d.classList.add('active');
+    d.onclick = () => setQuality(o.idx);
     menu.appendChild(d);
   });
 }
 
 function toggleQualityMenu() {
   const menu = document.getElementById('qualityMenu');
-  if (!menu) return;
-  if (menu.style.display === 'none' || !menu.style.display) {
-    buildQualityMenu(); updateQualityBtn(); menu.style.display = 'block';
-  } else { menu.style.display = 'none'; }
-}
-
-async function setQualityManual(q) {
-  const menu = document.getElementById('qualityMenu');
-  if (menu) menu.style.display = 'none';
-  if (!localScreenStream) return;
-  const vTrack = localScreenStream.getVideoTracks()[0];
-  if (!vTrack) return;
-  if (q === -1) {
-    isAutoQuality = true; startAdaptiveQuality(vTrack); sysMsg('Sifat: Avto');
+  if (menu.classList.contains('open')) {
+    menu.classList.remove('open');
   } else {
-    isAutoQuality = false; currentQuality = q;
-    clearInterval(qualityInterval);
-    await applyQuality(vTrack, QUALITY_LEVELS[q]);
-    sysMsg('Sifat: ' + QUALITY_LEVELS[q].label);
+    buildQualityMenu();
+    menu.classList.add('open');
   }
-  updateQualityBtn();
 }
 
-function startAdaptiveQuality(videoTrack) {
+function updateQualityBtn() {
+  const btn = document.getElementById('qualityBtn');
+  if (!btn) return;
+  btn.innerHTML = '&#9881; ' + (isAutoQuality ? 'Avto' : QUALITY_LEVELS[currentQuality].label);
+}
+
+// Ekranni qayta boshlash orqali sifatni o'zgartirish (applyConstraints ishonchsiz)
+async function restartScreenWithQuality(level) {
+  if (!isSharing) return;
+  try {
+    // Eski streamni to'xtat
+    if (localScreenStream) localScreenStream.getTracks().forEach(t => t.stop());
+
+    // Yangi sifatda qayta ol
+    localScreenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width:{ideal:level.w,max:level.w}, height:{ideal:level.h,max:level.h}, frameRate:{ideal:level.fps,max:level.fps}, cursor:'always' },
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
+
+    // Thumbnail yangilash
+    const thumb = document.getElementById('localScreenThumb');
+    thumb.srcObject = localScreenStream;
+
+    // PeerJS call ni yangi stream bilan almashtirish
+    if (screenCall) { try{screenCall.close();}catch(e){} screenCall=null; }
+    const tracks = [...localScreenStream.getVideoTracks(), ...localScreenStream.getAudioTracks()];
+    screenCall = peer.call(theirId(), new MediaStream(tracks), {metadata:{type:'screen'}});
+    screenCall.on('stream', () => {});
+    screenCall.on('close', () => { if (isSharing) stopScreenShare(); });
+
+    // Agar brauzer UI orqali to'xtatsa
+    localScreenStream.getVideoTracks()[0].onended = () => stopScreenShare();
+
+    sysMsg('Sifat: ' + level.label);
+  } catch(e) {
+    if (e.name !== 'NotAllowedError') sysMsg('Sifatni o'zgartirishda xato.');
+  }
+}
+
+async function setQuality(idx) {
+  document.getElementById('qualityMenu').classList.remove('open');
+  if (idx === -1) {
+    isAutoQuality = true;
+    updateQualityBtn();
+    if (isSharing) startAdaptiveQuality();
+    sysMsg('Sifat: Avto');
+  } else {
+    isAutoQuality = false;
+    clearInterval(qualityInterval);
+    currentQuality = idx;
+    updateQualityBtn();
+    if (isSharing) await restartScreenWithQuality(QUALITY_LEVELS[idx]);
+  }
+}
+
+function startAdaptiveQuality() {
   clearInterval(qualityInterval);
-  let lastBytesSent = 0, lastTime = Date.now();
+  let lastBytes = 0, lastTime = Date.now();
   isAutoQuality = true;
   qualityInterval = setInterval(async () => {
     if (!isAutoQuality || !screenCall || !screenCall.peerConnection) return;
     try {
       const stats = await screenCall.peerConnection.getStats();
-      let bytesSent = 0;
-      stats.forEach(s => { if (s.type==='outbound-rtp' && s.kind==='video') bytesSent = s.bytesSent||0; });
+      let bytes = 0;
+      stats.forEach(s => { if (s.type==='outbound-rtp' && s.kind==='video') bytes = s.bytesSent||0; });
       const now = Date.now();
-      const kbps = ((bytesSent - lastBytesSent) * 8) / ((now - lastTime) / 1000) / 1000;
-      lastBytesSent = bytesSent; lastTime = now;
+      const kbps = ((bytes - lastBytes) * 8) / ((now - lastTime)/1000) / 1000;
+      lastBytes = bytes; lastTime = now;
       let t = currentQuality;
-      if      (kbps > 900 && t < 3) t++;
-      else if (kbps < 150 && t > 0) t--;
-      else if (kbps < 350 && t > 1) t--;
+      if      (kbps > 2500 && t < QUALITY_LEVELS.length-1) t++;
+      else if (kbps > 1200 && t < 3) t++;
+      else if (kbps < 200  && t > 0) t--;
+      else if (kbps < 600  && t > 1) t--;
       if (t !== currentQuality) {
         currentQuality = t;
-        await applyQuality(videoTrack, QUALITY_LEVELS[t]);
-        sysMsg('Avto sifat: ' + QUALITY_LEVELS[t].label);
         updateQualityBtn();
+        await restartScreenWithQuality(QUALITY_LEVELS[t]);
       }
     } catch(e) {}
-  }, 4000);
+  }, 6000);
 }
 
 /* ===== SCREEN SHARE ===== */
@@ -802,13 +848,14 @@ async function toggleScreen() {
 }
 
 async function startScreenShare() {
+  const startLevel = QUALITY_LEVELS[currentQuality];
   try {
     localScreenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { width:{ideal:854,max:854}, height:{ideal:480,max:480}, frameRate:{ideal:15,max:20}, cursor:'always' },
-      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 }
+      video: { width:{ideal:startLevel.w}, height:{ideal:startLevel.h}, frameRate:{ideal:startLevel.fps}, cursor:'always' },
+      audio: { echoCancellation: true, noiseSuppression: true }
     });
 
-    isSharing = true; currentQuality = 2;
+    isSharing = true;
     const sb = document.getElementById('screenBtn');
     sb.classList.add('sharing'); sb.textContent='🛑';
 
@@ -817,39 +864,31 @@ async function startScreenShare() {
     document.getElementById('screenArea').classList.add('show');
     document.getElementById('screenLabel').textContent = '🖥️ Sizning ekraningiz';
 
-    // Video + sistema ovozi (mic EMAS) — echo yo'q
-    const screenTracks = [...localScreenStream.getVideoTracks(), ...localScreenStream.getAudioTracks()];
-    screenCall = peer.call(theirId(), new MediaStream(screenTracks), {metadata:{type:'screen'}});
+    const tracks = [...localScreenStream.getVideoTracks(), ...localScreenStream.getAudioTracks()];
+    screenCall = peer.call(theirId(), new MediaStream(tracks), {metadata:{type:'screen'}});
     screenCall.on('stream', () => {});
     screenCall.on('close', () => { if (isSharing) stopScreenShare(); });
+    localScreenStream.getVideoTracks()[0].onended = () => stopScreenShare();
 
-    // Adaptiv sifat boshlash
-    const vTrack = localScreenStream.getVideoTracks()[0];
-    await applyQuality(vTrack, QUALITY_LEVELS[currentQuality]);
-    startAdaptiveQuality(vTrack);
-    vTrack.onended = () => stopScreenShare();
+    if (isAutoQuality) startAdaptiveQuality();
     updateQualityBtn();
-
-    sysMsg('Ekran ulashish boshlandi (sifat: ' + QUALITY_LEVELS[currentQuality].label + ')');
+    sysMsg('Ekran ulashish boshlandi (' + (isAutoQuality ? 'Avto' : startLevel.label) + ')');
   } catch(e) {
     if (e.name !== 'NotAllowedError') sysMsg('Ekran ulashishda xato.');
   }
 }
+
 function stopScreenShare() {
   isSharing = false;
   clearInterval(qualityInterval); qualityInterval = null;
-  if (localScreenStream) {
-    localScreenStream.getTracks().forEach(t=>t.stop());
-    localScreenStream=null;
-  }
+  if (localScreenStream) { localScreenStream.getTracks().forEach(t=>t.stop()); localScreenStream=null; }
   if (screenCall) { try{screenCall.close();}catch(e){} screenCall=null; }
-  const sa = document.getElementById('screenAudio');
-  if (sa) sa.srcObject = null;
+  document.getElementById('screenAudio').srcObject = null;
   const sb = document.getElementById('screenBtn');
   sb.classList.remove('sharing'); sb.textContent='🖥️';
   document.getElementById('localScreenThumb').style.display='none';
   document.getElementById('localScreenThumb').srcObject=null;
-  // Hide screen area only if no remote screen either
+  document.getElementById('qualityMenu').classList.remove('open');
   const rs = document.getElementById('remoteScreen');
   if (!rs.srcObject) document.getElementById('screenArea').classList.remove('show');
   sysMsg("Ekran ulashish to'xtatildi.");
@@ -860,9 +899,7 @@ function acceptScreen() {
   if (!pendingScreen) return;
   pendingScreen.answer(new MediaStream());
   pendingScreen.on('stream', remoteStream => {
-    const rv = document.getElementById('remoteScreen');
-    rv.srcObject = remoteStream;
-    // Sistema ovozini o'ynat (YouTube va boshqalar), mic echo yo'q
+    document.getElementById('remoteScreen').srcObject = remoteStream;
     document.getElementById('screenAudio').srcObject = remoteStream;
     document.getElementById('screenArea').classList.add('show');
     document.getElementById('screenLabel').textContent = '📺 U tomonning ekrani';
