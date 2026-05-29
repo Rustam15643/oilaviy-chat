@@ -76,6 +76,11 @@ body {
   background: rgba(0,0,0,0.6); color: #fff;
   font-size: 11px; padding: 3px 8px; border-radius: 10px;
 }
+.q-opt {
+  padding: 9px 18px; color: #fff; font-size: 13px;
+  cursor: pointer; white-space: nowrap; transition: background 0.1s;
+}
+.q-opt:hover, .q-opt.active { background: #1a9e72; }
 
 .call-banner {
   background: #0d2e20; border-bottom: 1px solid rgba(26,158,114,0.3);
@@ -346,8 +351,10 @@ body {
     <video id="remoteScreen" autoplay playsinline muted></video>
     <video id="localScreenThumb" autoplay playsinline muted></video>
     <div class="screen-label" id="screenLabel">📺 Ekran</div>
-  <button id="fullscreenBtn" onclick="toggleFullscreen()" title="Kattalashtirish">⛶</button>
-  <button id="exitFsBtn" onclick="toggleFullscreen()" title="Kichraytirish">✕</button>
+    <div id="qualityMenu" style="display:none;position:absolute;bottom:38px;left:8px;background:rgba(0,0,0,0.85);border-radius:10px;overflow:hidden;z-index:202;min-width:90px;"></div>
+    <button id="qualityBtn" onclick="toggleQualityMenu()" style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.65);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;z-index:202;">&#9881; Avto</button>
+  <button id="fullscreenBtn" onclick="toggleFullscreen()" title="Kattalashtirish">&#x26F6;</button>
+  <button id="exitFsBtn" onclick="toggleFullscreen()" title="Kichraytirish">&#x2715;</button>
   </div>
 
   <div class="call-banner" id="callBanner">
@@ -695,96 +702,124 @@ function showCallUI() {
   }, 1000);
 }
 
-/* ===== SCREEN SHARE ===== */
-async function toggleScreen() {
-  if (isSharing) { stopScreenShare(); return; }
-  startScreenShare();
-}
-
 /* ===== ADAPTIVE QUALITY ===== */
 let qualityInterval = null;
+let isAutoQuality = true;
 const QUALITY_LEVELS = [
   { width:256,  height:144,  frameRate:8,  label:'144p' },
   { width:426,  height:240,  frameRate:12, label:'240p' },
   { width:640,  height:360,  frameRate:15, label:'360p' },
   { width:854,  height:480,  frameRate:20, label:'480p' },
 ];
-let currentQuality = 2; // 360p dan boshlash
+let currentQuality = 2;
 
 async function applyQuality(track, level) {
   try {
     await track.applyConstraints({
-      width:  { ideal: level.width },
-      height: { ideal: level.height },
-      frameRate: { ideal: level.frameRate }
+      width: { ideal: level.width }, height: { ideal: level.height }, frameRate: { ideal: level.frameRate }
     });
   } catch(e) {}
 }
 
+function updateQualityBtn() {
+  const btn = document.getElementById('qualityBtn');
+  if (!btn) return;
+  btn.innerHTML = '&#9881; ' + (isAutoQuality ? 'Avto' : QUALITY_LEVELS[currentQuality].label);
+  document.querySelectorAll('.q-opt').forEach(el => {
+    const q = parseInt(el.dataset.q);
+    el.classList.toggle('active', isAutoQuality ? q === -1 : q === currentQuality);
+  });
+}
+
+function buildQualityMenu() {
+  const menu = document.getElementById('qualityMenu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  [{q:-1,label:'Avto'},{q:0,label:'144p'},{q:1,label:'240p'},{q:2,label:'360p'},{q:3,label:'480p'}].forEach(o => {
+    const d = document.createElement('div');
+    d.className = 'q-opt'; d.dataset.q = o.q; d.textContent = o.label;
+    d.onclick = () => setQualityManual(o.q);
+    menu.appendChild(d);
+  });
+}
+
+function toggleQualityMenu() {
+  const menu = document.getElementById('qualityMenu');
+  if (!menu) return;
+  if (menu.style.display === 'none' || !menu.style.display) {
+    buildQualityMenu(); updateQualityBtn(); menu.style.display = 'block';
+  } else { menu.style.display = 'none'; }
+}
+
+async function setQualityManual(q) {
+  const menu = document.getElementById('qualityMenu');
+  if (menu) menu.style.display = 'none';
+  if (!localScreenStream) return;
+  const vTrack = localScreenStream.getVideoTracks()[0];
+  if (!vTrack) return;
+  if (q === -1) {
+    isAutoQuality = true; startAdaptiveQuality(vTrack); sysMsg('Sifat: Avto');
+  } else {
+    isAutoQuality = false; currentQuality = q;
+    clearInterval(qualityInterval);
+    await applyQuality(vTrack, QUALITY_LEVELS[q]);
+    sysMsg('Sifat: ' + QUALITY_LEVELS[q].label);
+  }
+  updateQualityBtn();
+}
+
 function startAdaptiveQuality(videoTrack) {
   clearInterval(qualityInterval);
-  let lastBytesSent = 0;
-  let lastTime = Date.now();
-
+  let lastBytesSent = 0, lastTime = Date.now();
+  isAutoQuality = true;
   qualityInterval = setInterval(async () => {
-    if (!screenCall || !screenCall.peerConnection) return;
-    const pc = screenCall.peerConnection;
+    if (!isAutoQuality || !screenCall || !screenCall.peerConnection) return;
     try {
-      const stats = await pc.getStats();
+      const stats = await screenCall.peerConnection.getStats();
       let bytesSent = 0;
-      stats.forEach(s => {
-        if (s.type === 'outbound-rtp' && s.kind === 'video') bytesSent = s.bytesSent || 0;
-      });
+      stats.forEach(s => { if (s.type==='outbound-rtp' && s.kind==='video') bytesSent = s.bytesSent||0; });
       const now = Date.now();
-      const elapsed = (now - lastTime) / 1000;
-      const kbps = ((bytesSent - lastBytesSent) * 8) / elapsed / 1000;
+      const kbps = ((bytesSent - lastBytesSent) * 8) / ((now - lastTime) / 1000) / 1000;
       lastBytesSent = bytesSent; lastTime = now;
-
-      // Sifatni tezlikka qarab moslash
-      let targetLevel = currentQuality;
-      if (kbps > 800 && currentQuality < QUALITY_LEVELS.length - 1) targetLevel = currentQuality + 1;
-      else if (kbps < 200 && currentQuality > 0) targetLevel = currentQuality - 1;
-      else if (kbps < 400 && currentQuality > 1) targetLevel = currentQuality - 1;
-
-      if (targetLevel !== currentQuality) {
-        currentQuality = targetLevel;
-        await applyQuality(videoTrack, QUALITY_LEVELS[currentQuality]);
-        sysMsg('📶 Sifat: ' + QUALITY_LEVELS[currentQuality].label);
+      let t = currentQuality;
+      if      (kbps > 900 && t < 3) t++;
+      else if (kbps < 150 && t > 0) t--;
+      else if (kbps < 350 && t > 1) t--;
+      if (t !== currentQuality) {
+        currentQuality = t;
+        await applyQuality(videoTrack, QUALITY_LEVELS[t]);
+        sysMsg('Avto sifat: ' + QUALITY_LEVELS[t].label);
+        updateQualityBtn();
       }
     } catch(e) {}
   }, 4000);
 }
 
+/* ===== SCREEN SHARE ===== */
+async function toggleScreen() {
+  if (isSharing) { stopScreenShare(); return; }
+  startScreenShare();
+}
+
 async function startScreenShare() {
   try {
     localScreenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        width:  { ideal: 854,  max: 854 },
-        height: { ideal: 480,  max: 480 },
-        frameRate: { ideal: 15, max: 20 },
-        cursor: 'always'
-      },
+      video: { width:{ideal:854,max:854}, height:{ideal:480,max:480}, frameRate:{ideal:15,max:20}, cursor:'always' },
       audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 }
     });
 
-    // Echo muammosi: mic audiosi FAQAT alohida ovozli qo'ng'iroq orqali ketadi.
-    // Faqat kompyuter/sistema ovozi (YouTube, video) ekran streamiga qo'shiladi.
-    isSharing = true;
-    currentQuality = 2;
+    isSharing = true; currentQuality = 2;
     const sb = document.getElementById('screenBtn');
     sb.classList.add('sharing'); sb.textContent='🛑';
 
-    // Show own screen as thumbnail
     const thumb = document.getElementById('localScreenThumb');
-    thumb.srcObject = localScreenStream;
-    thumb.style.display = 'block';
+    thumb.srcObject = localScreenStream; thumb.style.display = 'block';
     document.getElementById('screenArea').classList.add('show');
     document.getElementById('screenLabel').textContent = '🖥️ Sizning ekraningiz';
 
     // Video + sistema ovozi (mic EMAS) — echo yo'q
     const screenTracks = [...localScreenStream.getVideoTracks(), ...localScreenStream.getAudioTracks()];
-    const videoOnlyStream = new MediaStream(screenTracks);
-    screenCall = peer.call(theirId(), videoOnlyStream, {metadata:{type:'screen'}});
+    screenCall = peer.call(theirId(), new MediaStream(screenTracks), {metadata:{type:'screen'}});
     screenCall.on('stream', () => {});
     screenCall.on('close', () => { if (isSharing) stopScreenShare(); });
 
@@ -792,16 +827,14 @@ async function startScreenShare() {
     const vTrack = localScreenStream.getVideoTracks()[0];
     await applyQuality(vTrack, QUALITY_LEVELS[currentQuality]);
     startAdaptiveQuality(vTrack);
-
-    // Handle user stopping share from browser UI
     vTrack.onended = () => stopScreenShare();
+    updateQualityBtn();
 
-    sysMsg("Ekran ulashish boshlandi 🖥️ (sifat: " + QUALITY_LEVELS[currentQuality].label + ")");
+    sysMsg('Ekran ulashish boshlandi (sifat: ' + QUALITY_LEVELS[currentQuality].label + ')');
   } catch(e) {
-    if (e.name !== 'NotAllowedError') sysMsg("⚠️ Ekran ulashishda xato.");
+    if (e.name !== 'NotAllowedError') sysMsg('Ekran ulashishda xato.');
   }
 }
-
 function stopScreenShare() {
   isSharing = false;
   clearInterval(qualityInterval); qualityInterval = null;
@@ -825,18 +858,15 @@ function stopScreenShare() {
 function acceptScreen() {
   document.getElementById('incomingScreenBanner').classList.remove('show');
   if (!pendingScreen) return;
-  // Bo'sh stream bilan javob — ovoz alohida qo'ng'iroq orqali ketadi (echo yo'q)
   pendingScreen.answer(new MediaStream());
   pendingScreen.on('stream', remoteStream => {
     const rv = document.getElementById('remoteScreen');
     rv.srcObject = remoteStream;
-    // Sistema ovozini (YouTube, video) screenAudio orqali o'ynat
-    // Mic ovozi remoteAudio dan keladi — echo yo'q
-    const screenAudio = document.getElementById('screenAudio');
-    screenAudio.srcObject = remoteStream;
+    // Sistema ovozini o'ynat (YouTube va boshqalar), mic echo yo'q
+    document.getElementById('screenAudio').srcObject = remoteStream;
     document.getElementById('screenArea').classList.add('show');
     document.getElementById('screenLabel').textContent = '📺 U tomonning ekrani';
-    sysMsg("Ekran ulashish qabul qilindi 🖥️");
+    sysMsg("Ekran ulashish qabul qilindi");
   });
   pendingScreen.on('close', () => {
     document.getElementById('remoteScreen').srcObject=null;
