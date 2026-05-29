@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Oilaviy Chat</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Oilaviy Chat">
+<meta name="theme-color" content="#0f1923">
+<link rel="manifest" id="manifestLink">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #0f1923; color: #e8edf2;
+  height: 100dvh; display: flex; flex-direction: column;
+  overflow: hidden; max-width: 480px; margin: 0 auto;
+}
+#roleScreen {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 30px 24px; gap: 20px;
+}
+.app-logo {
+  width: 80px; height: 80px; background: #1a9e72;
+  border-radius: 20px; display: flex; align-items: center;
+  justify-content: center; font-size: 40px; margin-bottom: 8px;
+}
+.app-title { font-size: 26px; font-weight: 700; color: #e8edf2; text-align: center; }
+.role-hint {
+  font-size: 13px; color: #7a8fa0; text-align: center;
+  background: #1a2535; padding: 10px 16px; border-radius: 10px; width: 100%;
+}
+.role-btn {
+  width: 100%; padding: 18px; border: none; border-radius: 16px;
+  font-size: 18px; font-weight: 700; cursor: pointer;
+  transition: transform 0.1s; justify-content: center;
+}
+.role-btn:active { transform: scale(0.97); }
+.role-btn.me { background: #1a9e72; color: #fff; }
+.role-btn.sister { background: #1a4a72; color: #fff; }
+#chatScreen { flex: 1; display: none; flex-direction: column; height: 100dvh; }
+.header {
+  padding: 14px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.08);
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.header-info { flex: 1; }
+.header-name { font-size: 16px; font-weight: 600; }
+.header-status { font-size: 12px; color: #7a8fa0; margin-top: 1px; display: flex; align-items: center; gap: 5px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #7a8fa0; flex-shrink: 0; }
+.dot.green { background: #1a9e72; }
+.dot.orange { background: #e8a31a; }
+.dot.pulse { animation: dotPulse 1s infinite; }
+@keyframes dotPulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* Screen share video area */
+#screenArea {
+  display: none; background: #000; position: relative;
+  flex-shrink: 0; max-height: 220px; overflow: hidden;
+}
+#screenArea.show { display: block; }
+#remoteScreen {
+  width: 100%; max-height: 220px; object-fit: contain;
+  display: block; background: #000;
+}
+#localScreenThumb {
+  position: absolute; bottom: 8px; right: 8px;
+  width: 90px; height: 60px; border-radius: 6px;
+  object-fit: cover; border: 2px solid #1a9e72;
+  display: none; background: #111;
+}
+.screen-label {
+  position: absolute; top: 6px; left: 8px;
+  background: rgba(0,0,0,0.6); color: #fff;
+  font-size: 11px; padding: 3px 8px; border-radius: 10px;
+}
+
+.call-banner {
+  background: #0d2e20; border-bottom: 1px solid rgba(26,158,114,0.3);
+  padding: 9px 16px; display: none; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.call-banner.show { display: flex; }
+.call-timer { font-size: 13px; color: #1a9e72; font-family: monospace; font-weight: 700; }
+.end-btn {
+  margin-left: auto; background: #c0392b; color: #fff; border: none;
+  border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.incoming-banner {
+  background: #0d2e20; border: 1px solid #1a9e72; border-radius: 12px;
+  margin: 8px; padding: 12px 14px; display: none; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.incoming-banner.show { display: flex; }
+.inc-label { flex: 1; font-size: 14px; }
+.acc-btn { background: #1a9e72; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.rej-btn { background: #c0392b; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.messages {
+  flex: 1; overflow-y: auto; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px; color: #4a5a6a; padding: 20px; text-align: center;
+}
+.empty-icon { font-size: 48px; margin-bottom: 6px; }
+.empty-state p { font-size: 14px; line-height: 1.5; }
+.msg { max-width: 78%; padding: 9px 13px 7px; border-radius: 16px; font-size: 15px; line-height: 1.45; word-break: break-word; }
+.msg.me { background: #1a9e72; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+.msg.them { background: #1a2535; color: #e8edf2; align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid rgba(255,255,255,0.07); }
+.msg.sys { background: transparent; color: #4a5a6a; font-size: 12px; align-self: center; text-align: center; border: 1px dashed rgba(255,255,255,0.08); border-radius: 20px; padding: 4px 12px; max-width: 90%; }
+.msg-time { font-size: 10px; opacity: 0.55; margin-top: 3px; text-align: right; }
+.input-bar {
+  padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255,255,255,0.08);
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0; background: #0f1923;
+}
+.icon-btn {
+  width: 42px; height: 42px; border-radius: 50%; border: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 19px; cursor: pointer; transition: background 0.15s; flex-shrink: 0;
+}
+.icon-btn:disabled { opacity: 0.35; cursor: default; }
+.btn-call { background: #1a2535; color: #e8edf2; }
+.btn-call.calling { background: #c0392b; }
+.btn-screen { background: #1a2535; color: #e8edf2; }
+.btn-screen.sharing { background: #7c3aed; }
+.msg-input {
+  flex: 1; background: #1a2535; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 22px; padding: 10px 14px; color: #e8edf2;
+  font-size: 15px; outline: none; font-family: inherit;
+}
+.msg-input:disabled { opacity: 0.35; }
+.msg-input:focus { border-color: #1a9e72; }
+.send-btn {
+  width: 42px; height: 42px; border-radius: 50%; background: #1a9e72;
+  color: #fff; border: none; font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.send-btn:disabled { opacity: 0.35; cursor: default; }
+.reconnect-btn {
+  background: transparent; border: 1px solid rgba(255,255,255,0.15);
+  color: #7a8fa0; border-radius: 8px; padding: 5px 10px;
+  font-size: 12px; cursor: pointer; margin-left: auto; flex-shrink: 0;
+}
+#installBanner {
+  background: #1a2535; border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 10px 14px; display: none; align-items: center;
+  gap: 10px; font-size: 13px; color: #b0bec8; flex-shrink: 0;
+}
+#installBanner.show { display: flex; }
+#installBtn {
+  margin-left: auto; background: #1a9e72; color: #fff; border: none;
+  border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+
+/* ===== CALL OVERLAY (Telegram/IMO style) ===== */
+#callOverlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 100;
+  background: linear-gradient(160deg, #0d2e20 0%, #0a1628 60%, #1a0a2e 100%);
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 0;
+}
+#callOverlay.show { display: flex; }
+
+.call-overlay-avatar {
+  width: 110px; height: 110px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1a9e72, #0d6e4f);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 56px;
+  box-shadow: 0 0 0 0 rgba(26,158,114,0.5);
+  animation: callPulse 1.8s infinite;
+  margin-bottom: 28px;
+}
+@keyframes callPulse {
+  0% { box-shadow: 0 0 0 0 rgba(26,158,114,0.5); }
+  70% { box-shadow: 0 0 0 30px rgba(26,158,114,0); }
+  100% { box-shadow: 0 0 0 0 rgba(26,158,114,0); }
+}
+.call-overlay-avatar.connected { animation: none; box-shadow: 0 0 0 4px rgba(26,158,114,0.4); }
+
+.call-overlay-name {
+  font-size: 28px; font-weight: 700;
+  color: #fff; margin-bottom: 10px; text-align: center;
+}
+.call-overlay-status {
+  font-size: 16px; color: rgba(255,255,255,0.65);
+  margin-bottom: 60px; text-align: center;
+}
+.call-overlay-timer {
+  font-size: 18px; font-weight: 600;
+  color: #1a9e72; font-family: monospace;
+  margin-bottom: 60px;
+  display: none;
+}
+
+.call-overlay-btns {
+  display: flex; gap: 40px; align-items: center; justify-content: center;
+}
+.call-big-btn {
+  width: 70px; height: 70px; border-radius: 50%;
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; transition: transform 0.1s;
+  flex-direction: column; gap: 4px;
+}
+.call-big-btn:active { transform: scale(0.92); }
+.call-big-btn .btn-label {
+  font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.8);
+  margin-top: 10px; white-space: nowrap;
+}
+.btn-hangup { background: #e53935; }
+.btn-mute { background: rgba(255,255,255,0.15); }
+.btn-mute.muted { background: rgba(255,255,255,0.35); }
+
+.call-btn-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.call-btn-lbl { font-size: 12px; color: rgba(255,255,255,0.6); }
+
+/* Incoming overlay */
+#incomingOverlay {
+  display: none; position: fixed; inset: 0; z-index: 101;
+  background: linear-gradient(160deg, #0d2e20 0%, #0a1628 60%);
+  flex-direction: column; align-items: center; justify-content: center; gap: 0;
+}
+#incomingOverlay.show { display: flex; }
+.incoming-avatar {
+  width: 110px; height: 110px; border-radius: 50%;
+  background: linear-gradient(135deg, #1a4a72, #0d2e50);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 56px; margin-bottom: 28px;
+  animation: callPulse 1.2s infinite;
+}
+.incoming-name { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 10px; }
+.incoming-label { font-size: 16px; color: rgba(255,255,255,0.65); margin-bottom: 70px; }
+.incoming-btns { display: flex; gap: 60px; }
+
+/* Exit / end conversation button */
+.exit-btn {
+  background: transparent; border: 1px solid rgba(255,255,255,0.15);
+  color: #7a8fa0; border-radius: 8px; padding: 5px 10px;
+  font-size: 12px; cursor: pointer; flex-shrink: 0;
+}
+
+/* Fullscreen video */
+#screenArea.fullscreen {
+  position: fixed; inset: 0; z-index: 200;
+  max-height: 100dvh; background: #000;
+  display: flex; align-items: center; justify-content: center;
+}
+#screenArea.fullscreen #remoteScreen {
+  width: 100%; height: 100%; max-height: 100dvh; object-fit: contain;
+}
+#fullscreenBtn {
+  position: absolute; bottom: 10px; right: 10px;
+  background: rgba(0,0,0,0.6); color: #fff;
+  border: none; border-radius: 8px; padding: 7px 12px;
+  font-size: 18px; cursor: pointer; z-index: 201;
+}
+#exitFsBtn {
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(0,0,0,0.6); color: #fff;
+  border: none; border-radius: 8px; padding: 7px 12px;
+  font-size: 18px; cursor: pointer; z-index: 201; display: none;
+}
+#screenArea.fullscreen #fullscreenBtn { display: none; }
+#screenArea.fullscreen #exitFsBtn { display: block; }
+
+/* Landscape auto-fullscreen */
+@media (orientation: landscape) and (max-width: 900px) {
+  #screenArea.show:not(.fullscreen) {
+    max-height: 100dvh;
+  }
+}
+
+/* Mic permission banner */
+#micBanner {
+  display: none; background: #2d1a0a; border-bottom: 1px solid #e8a31a;
+  padding: 10px 14px; align-items: center; gap: 10px; flex-shrink: 0;
+}
+#micBanner.show { display: flex; flex-direction: column; }
+#micBanner span { flex: 1; font-size: 13px; color: #e8c97a; }
+#micPermBtn {
+  background: #e8a31a; color: #000; border: none;
+  border-radius: 8px; padding: 7px 12px; font-size: 13px;
+  font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<div id="roleScreen">
+  <div class="app-logo">🏠</div>
+  <div class="app-title">Oilaviy Chat</div>
+  <div class="role-hint">Chatda gaplashish va qo'ng'iroqlashish uchun o'z turgan mamlakatingizni bosing</div>
+  <button class="role-btn me" onclick="selectRole('me')">O'zbekistondaman</button>
+  <button class="role-btn sister" onclick="selectRole('sister')">Rossiyadaman</button>
+</div>
+
+<div id="chatScreen">
+
+  <div id="micBanner">
+    <div style="display:flex;align-items:center;gap:10px;width:100%">
+      <span style="flex:1">🎙️ Mikrofonga ruxsat kerak</span>
+      <button id="micPermBtn" onclick="requestMicPermission()">Ruxsat berish</button>
+    </div>
+    <div id="micInstructions" style="display:none;margin-top:10px;font-size:12px;color:#e8c97a;line-height:1.8;width:100%">
+      📋 Quyidagi qadamlarni bajaring:<br>
+      1️⃣ Brauzer manzil satrida <b>🔒 yoki ⓘ</b> belgisini bosing<br>
+      2️⃣ <b>«Разрешения»</b> ni bosing<br>
+      3️⃣ <b>«Микрофон»</b> → <b>«Разрешить»</b> ni tanlang<br>
+      4️⃣ Sahifani yangilang va qaytadan urinib ko'ring<br><br>
+      <b>Yoki:</b> Chrome → ⋮ menyu → <b>Настройки</b> →
+      <b>Настройки сайтов</b> → <b>Микрофон</b> →
+      birinchi variantni tanlang (Сайты могут запрашивать)
+      <br><br>
+      <button onclick="location.reload()" style="background:#1a9e72;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px">🔄 Sahifani yangilash</button>
+    </div>
+  </div>
+  <div id="installBanner">
+    <span>📲 Ilovani telefoningizga o'rnating</span>
+    <button id="installBtn">O'rnatish</button>
+  </div>
+
+  <div class="header">
+    <div class="avatar" id="headerAvatar">🇷🇺</div>
+    <div class="header-info">
+      <div class="header-name" id="headerName">Rossiyadaman</div>
+      <div class="header-status">
+        <div class="dot" id="statusDot"></div>
+        <span id="statusText">Ulanmoqda...</span>
+      </div>
+    </div>
+    <button class="reconnect-btn" id="retryBtn" onclick="tryConnect()" style="display:none">🔄 Qayta</button>
+    <button class="exit-btn" onclick="exitChat()" title="Suhbatni tugatish">✕ Chiqish</button>
+  </div>
+
+  <!-- Remote screen share view -->
+  <div id="screenArea">
+    <video id="remoteScreen" autoplay playsinline muted></video>
+    <video id="localScreenThumb" autoplay playsinline muted></video>
+    <div class="screen-label" id="screenLabel">📺 Ekran</div>
+  <button id="fullscreenBtn" onclick="toggleFullscreen()" title="Kattalashtirish">⛶</button>
+  <button id="exitFsBtn" onclick="toggleFullscreen()" title="Kichraytirish">✕</button>
+  </div>
+
+  <div class="call-banner" id="callBanner">
+    <span style="font-size:18px" id="callIcon">🎙️</span>
+    <span style="font-size:13px;color:#b0bec8" id="callLabel">Ovozli qo'ng'iroq</span>
+    <span class="call-timer" id="callTimer">00:00</span>
+    <button class="end-btn" id="callEndBtn" onclick="endCallManual()">Tugatish</button>
+  </div>
+
+
+
+  <div class="incoming-banner" id="incomingScreenBanner" style="border-color:#7c3aed;">
+    <span style="font-size:22px">🖥️</span>
+    <span class="inc-label">Ekran ulashish so'rovi...</span>
+    <button class="rej-btn" onclick="rejectScreen()">✕</button>
+    <button class="acc-btn" style="background:#7c3aed" onclick="acceptScreen()">✓</button>
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">💬</div>
+      <p>Ulanish kutilmoqda...<br>Ikkalangiz ham shu sahifani ochib turing</p>
+    </div>
+  </div>
+
+  <div class="input-bar">
+    <button class="icon-btn btn-call" id="callBtn" onclick="toggleCall()" disabled title="Ovozli qo'ng'iroq">📞</button>
+    <button class="icon-btn btn-screen" id="screenBtn" onclick="toggleScreen()" disabled title="Ekran ulashish">🖥️</button>
+    <input class="msg-input" id="msgInput" placeholder="Xabar yozing..." disabled
+      onkeydown="if(event.key==='Enter')sendMsg()">
+    <button class="send-btn" id="sendBtn" onclick="sendMsg()" disabled>➤</button>
+  </div>
+
+  <!-- Big call overlay -->
+  <div id="callOverlay">
+    <div class="call-overlay-avatar" id="overlayAvatar">🇷🇺</div>
+    <div class="call-overlay-name" id="overlayName">Rossiyadaman</div>
+    <div class="call-overlay-status" id="overlayStatus">Qo'ng'iroq qilinmoqda...</div>
+    <div class="call-overlay-timer" id="overlayTimer">00:00</div>
+    <div class="call-overlay-btns">
+      <div class="call-btn-wrap">
+        <button class="call-big-btn btn-mute" id="muteBtn" onclick="toggleMute()">🎙️</button>
+        <span class="call-btn-lbl">Ovoz</span>
+      </div>
+      <div class="call-btn-wrap">
+        <button class="call-big-btn btn-hangup" onclick="endCallManual()">📵</button>
+        <span class="call-btn-lbl">Tugatish</span>
+      </div>
+      <div class="call-btn-wrap">
+        <button class="call-big-btn btn-mute" id="speakerBtn" onclick="toggleSpeaker()">🔊</button>
+        <span class="call-btn-lbl">Ovozdon</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incoming call overlay -->
+  <div id="incomingOverlay">
+    <div class="incoming-avatar" id="incomingAvatar">🇺🇿</div>
+    <div class="incoming-name" id="incomingName">O'zbekistondaman</div>
+    <div class="incoming-label">Kiruvchi qo'ng'iroq...</div>
+    <div class="incoming-btns">
+      <div class="call-btn-wrap">
+        <button class="call-big-btn btn-hangup" onclick="rejectCall()">📵</button>
+        <span class="call-btn-lbl">Rad etish</span>
+      </div>
+      <div class="call-btn-wrap">
+        <button class="call-big-btn" style="background:#1a9e72" onclick="acceptCall()">📞</button>
+        <span class="call-btn-lbl">Qabul qilish</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="remoteAudio" autoplay playsinline></audio>
+<audio id="screenAudio" autoplay playsinline></audio>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+<script>
+const ROOM = location.hash.slice(1) || Math.random().toString(36).slice(2);
+const IDS = { me: ROOM+'-OPA', sister: ROOM+'-SIN' };
+
+let myRole=null, peer=null, dataConn=null, mediaCall=null, screenCall=null;
+let localStream=null, localScreenStream=null, pendingCall=null, pendingScreen=null;
+let callSec=0, callTick=null, retryTimer=null, deferredInstall=null;
+let connected=false, wasInitiator=false, callDropped=false, manualEnd=false;
+let callReconnectTimer=null, isSharing=false;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); deferredInstall = e;
+  document.getElementById('installBanner').classList.add('show');
+});
+document.getElementById('installBtn').onclick = () => {
+  if (deferredInstall) { deferredInstall.prompt(); deferredInstall=null; }
+  document.getElementById('installBanner').classList.remove('show');
+};
+
+function selectRole(role) {
+  myRole = role;
+  document.getElementById('roleScreen').style.display = 'none';
+  document.getElementById('chatScreen').style.display = 'flex';
+  if (!location.hash) {
+    location.hash = ROOM;
+  }
+
+  if (role === 'me') {
+    document.getElementById('headerAvatar').textContent = '🇷🇺';
+    document.getElementById('headerName').textContent = 'Rossiyadaman';
+  } else {
+    document.getElementById('headerAvatar').textContent = '🇺🇿';
+    document.getElementById('headerName').textContent = "O'zbekistondaman";
+  }
+  initPeer();
+  navigator.mediaDevices.getUserMedia({ audio:true, video:false })
+    .then(s => { localStream = s; })
+    .catch(() => {});
+
+  checkMicPermission();
+  // Hide screen share on mobile (not supported in mobile browsers)
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const sb = document.getElementById('screenBtn');
+  if (isMobile) {
+    sb.style.display = 'none';
+  }
+}
+
+function myId() { return IDS[myRole]; }
+function theirId() { return myRole==='me' ? IDS.sister : IDS.me; }
+
+function initPeer() {
+  if (peer) { try { peer.destroy(); } catch(e){} }
+  setStatus('Ulanmoqda...','');
+  peer = new Peer(myId(), {
+    config: { iceServers: [
+      { urls:'stun:stun.l.google.com:19302' },
+      { urls:'stun:stun1.l.google.com:19302' },
+      { urls:'stun:stun.cloudflare.com:3478' },
+
+      {
+        urls:'turn:openrelay.metered.ca:80',
+        username:'openrelayproject',
+        credential:'openrelayproject'
+      },
+
+      {
+        urls:'turn:openrelay.metered.ca:443',
+        username:'openrelayproject',
+        credential:'openrelayproject'
+      }
+    ]}
+  });
+  peer.on('open', () => { setStatus('Kutilmoqda...','orange'); tryConnect(); });
+  peer.on('error', err => {
+    if (err.type==='unavailable-id') scheduleRetry(8000);
+    else { setStatus('Xato. Qayta...',''); scheduleRetry(5000); }
+  });
+  peer.on('connection', conn => {
+    if (dataConn) { try { dataConn.close(); } catch(e){} }
+    setupData(conn);
+  });
+  peer.on('call', call => {
+    if (call.metadata && call.metadata.type === 'screen') {
+      pendingScreen = call;
+      acceptScreen(); // Auto-accept screen share
+    } else {
+      pendingCall = call;
+      showIncomingOverlay();
+    }
+  });
+}
+
+function tryConnect() {
+  clearTimeout(retryTimer);
+  if (!peer || peer.destroyed) { initPeer(); return; }
+  const conn = peer.connect(theirId(), { reliable:true, serialization:'json' });
+  setupData(conn);
+}
+
+function setupData(conn) {
+  dataConn = conn;
+  conn.on('open', () => {
+    connected=true; clearTimeout(retryTimer);
+    setStatus('Ulandi ✓','green');
+    document.getElementById('emptyState').style.display='none';
+    document.getElementById('retryBtn').style.display='none';
+    document.getElementById('msgInput').disabled=false;
+    document.getElementById('sendBtn').disabled=false;
+    document.getElementById('callBtn').disabled=false;
+    document.getElementById('screenBtn').disabled=false;
+    sysMsg("Aloqa o'rnatildi 🎉");
+  });
+  conn.on('data', d => { if (d && d.type==='msg') addMsg(d.text,'them'); });
+  conn.on('close', () => {
+    connected=false;
+    setStatus('Uzildi. Qayta...','orange');
+    document.getElementById('msgInput').disabled=true;
+    document.getElementById('sendBtn').disabled=true;
+    document.getElementById('callBtn').disabled=true;
+    document.getElementById('screenBtn').disabled=true;
+    document.getElementById('retryBtn').style.display='block';
+    sysMsg("Aloqa uzildi. Qayta ulanmoqda...");
+    scheduleRetry(3000);
+  });
+  conn.on('error', () => { if (!connected) scheduleRetry(4000); });
+}
+
+function scheduleRetry(ms) {
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(() => { if (!connected) tryConnect(); }, ms);
+}
+
+function setStatus(text, color) {
+  document.getElementById('statusText').textContent = text;
+  const d = document.getElementById('statusDot');
+  d.className = 'dot'+(color?' '+color:'');
+  if (!color) d.classList.add('pulse');
+}
+
+function sendMsg() {
+  const inp = document.getElementById('msgInput');
+  const text = inp.value.trim();
+  if (!text||!dataConn||!connected) return;
+  try { dataConn.send({type:'msg',text}); } catch(e){return;}
+  addMsg(text,'me'); inp.value='';
+}
+
+function addMsg(text, who) {
+  document.getElementById('emptyState').style.display='none';
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className='msg '+who;
+  const now=new Date();
+  const t=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+  div.innerHTML=escHtml(text)+'<div class="msg-time">'+t+'</div>';
+  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
+}
+
+function sysMsg(text) {
+  const msgs=document.getElementById('messages');
+  const div=document.createElement('div');
+  div.className='msg sys'; div.textContent=text;
+  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
+}
+
+function escHtml(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ===== VOICE CALL ===== */
+async function toggleCall() {
+  if (mediaCall) { endCallManual(); return; }
+  startCall();
+}
+
+async function startCall() {
+  manualEnd=false; wasInitiator=true;
+  try {
+    if (!localStream) localStream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    mediaCall = peer.call(theirId(), localStream, {metadata:{type:'voice'}});
+    mediaCall.on('stream', remoteStream => {
+      document.getElementById('remoteAudio').srcObject=remoteStream;
+      callDropped=false; showCallUI();
+    });
+    mediaCall.on('close', () => { if (!manualEnd) onCallDropped(); else endCall(); });
+    mediaCall.on('error', () => { if (!manualEnd) onCallDropped(); });
+    showCallOverlay("Qo'ng'iroq qilinmoqda...", false);
+    sysMsg("Qo'ng'iroq qilinmoqda... 📞");
+  } catch(e) {
+    document.getElementById('micBanner').classList.add('show');
+    sysMsg("⚠️ Mikrofonga ruxsat kerak — sariq tugmani bosing.");
+  }
+}
+
+async function acceptCall() {
+  hideIncomingOverlay();
+  manualEnd=false; wasInitiator=false;
+  try {
+    if (!localStream) localStream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    pendingCall.answer(localStream);
+    pendingCall.on('stream', remoteStream => {
+      document.getElementById('remoteAudio').srcObject=remoteStream;
+      callDropped=false; showCallUI();
+    });
+    pendingCall.on('close', () => { if (!manualEnd) onCallDropped(); else endCall(); });
+    mediaCall=pendingCall; pendingCall=null;
+  } catch(e) {
+    sysMsg("⚠️ Mikrofonga ruxsat berilmadi."); rejectCall();
+  }
+}
+
+function rejectCall() {
+  hideIncomingOverlay();
+  if (pendingCall) { try{pendingCall.close();}catch(e){} pendingCall=null; }
+}
+
+function onCallDropped() {
+  callDropped=true; mediaCall=null;
+  document.getElementById('callIcon').textContent='🔄';
+  document.getElementById('callLabel').textContent="Qayta ulanmoqda...";
+  showCallOverlay("Qayta ulanmoqda...", false);
+  clearInterval(callTick);
+  sysMsg("Qo'ng'iroq uzildi. Qayta ulanmoqda...");
+  if (wasInitiator && connected) {
+    clearTimeout(callReconnectTimer);
+    callReconnectTimer = setTimeout(() => {
+      if (!manualEnd && connected) { sysMsg("Qayta qo'ng'iroq... 📞"); startCall(); }
+    }, 3000);
+  }
+}
+
+function endCallManual() {
+  manualEnd=true; clearTimeout(callReconnectTimer); endCall();
+}
+
+function endCall() {
+  if (mediaCall) { try{mediaCall.close();}catch(e){} mediaCall=null; }
+  if (manualEnd && localStream) { localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+  document.getElementById('remoteAudio').srcObject=null;
+  document.getElementById('callBanner').classList.remove('show');
+  hideCallOverlay();
+  const cb=document.getElementById('callBtn');
+  cb.classList.remove('calling'); cb.textContent='📞';
+  clearInterval(callTick); clearTimeout(callReconnectTimer);
+  callSec=0; callDropped=false; wasInitiator=false;
+  isMuted=false;
+}
+
+function showCallUI() {
+  clearTimeout(callReconnectTimer);
+  const cb=document.getElementById('callBtn');
+  cb.classList.add('calling'); cb.textContent='📵';
+  showCallOverlay("Ulandi", true);
+  if (!callDropped) {
+    sysMsg("Ovozli qo'ng'iroq boshlandi 🎙️");
+    callSec=0;
+  } else {
+    sysMsg("Qo'ng'iroq tiklandi ✅");
+  }
+  clearInterval(callTick);
+  callTick = setInterval(() => {
+    callSec++;
+    const m=Math.floor(callSec/60).toString().padStart(2,'0');
+    const s=(callSec%60).toString().padStart(2,'0');
+    document.getElementById('callTimer').textContent=m+':'+s;
+    document.getElementById('overlayTimer').textContent=m+':'+s;
+  }, 1000);
+}
+
+/* ===== SCREEN SHARE ===== */
+async function toggleScreen() {
+  if (isSharing) { stopScreenShare(); return; }
+  startScreenShare();
+}
+
+async function startScreenShare() {
+  try {
+    localScreenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate:15, cursor:'always' },
+      audio: { echoCancellation: false, noiseSuppression: false, sampleRate: 44100 }
+    });
+    
+    // Add mic audio track to screen stream so voice is heard on receiver side too
+    if (localStream && localStream.getAudioTracks().length > 0) {
+      localStream.getAudioTracks().forEach(track => {
+        try { localScreenStream.addTrack(track); } catch(e) {}
+      });
+    }
+    isSharing = true;
+    const sb = document.getElementById('screenBtn');
+    sb.classList.add('sharing'); sb.textContent='🛑';
+
+    // Show own screen as thumbnail
+    const thumb = document.getElementById('localScreenThumb');
+    thumb.srcObject = localScreenStream;
+    thumb.style.display = 'block';
+    document.getElementById('screenArea').classList.add('show');
+    document.getElementById('screenLabel').textContent = '🖥️ Sizning ekraningiz';
+
+    // Call peer with screen stream
+    screenCall = peer.call(theirId(), localScreenStream, {metadata:{type:'screen'}});
+    screenCall.on('stream', () => {});
+    screenCall.on('close', () => { if (isSharing) stopScreenShare(); });
+
+    // Handle user stopping share from browser UI
+    localScreenStream.getVideoTracks()[0].onended = () => stopScreenShare();
+
+    sysMsg("Ekran ulashish boshlandi 🖥️");
+  } catch(e) {
+    if (e.name !== 'NotAllowedError') sysMsg("⚠️ Ekran ulashishda xato.");
+  }
+}
+
+function stopScreenShare() {
+  isSharing = false;
+  if (localScreenStream) {
+    // Only stop video tracks, not mic audio tracks (they belong to localStream)
+    localScreenStream.getVideoTracks().forEach(t=>t.stop());
+    localScreenStream=null;
+  }
+  if (screenCall) { try{screenCall.close();}catch(e){} screenCall=null; }
+  const sa = document.getElementById('screenAudio');
+  if (sa) sa.srcObject = null;
+  const sb = document.getElementById('screenBtn');
+  sb.classList.remove('sharing'); sb.textContent='🖥️';
+  document.getElementById('localScreenThumb').style.display='none';
+  document.getElementById('localScreenThumb').srcObject=null;
+  // Hide screen area only if no remote screen either
+  const rs = document.getElementById('remoteScreen');
+  if (!rs.srcObject) document.getElementById('screenArea').classList.remove('show');
+  sysMsg("Ekran ulashish to'xtatildi.");
+}
+
+function acceptScreen() {
+  document.getElementById('incomingScreenBanner').classList.remove('show');
+  if (!pendingScreen) return;
+  // Answer with our mic stream so our voice is heard on sharer's side
+  const answerStream = localStream || new MediaStream();
+  pendingScreen.answer(answerStream);
+  pendingScreen.on('stream', remoteStream => {
+    const rv = document.getElementById('remoteScreen');
+    rv.srcObject = remoteStream;
+    // Play audio from screen share stream (computer audio + sharer's mic)
+    const screenAudio = document.getElementById('screenAudio');
+    screenAudio.srcObject = remoteStream;
+    document.getElementById('screenArea').classList.add('show');
+    document.getElementById('screenLabel').textContent = '📺 U tomonning ekrani';
+    sysMsg("Ekran ulashish qabul qilindi 🖥️");
+  });
+  pendingScreen.on('close', () => {
+    document.getElementById('remoteScreen').srcObject=null;
+    if (!isSharing) document.getElementById('screenArea').classList.remove('show');
+    sysMsg("Ekran ulashish tugadi.");
+  });
+  screenCall = pendingScreen; pendingScreen = null;
+}
+
+function rejectScreen() {
+  document.getElementById('incomingScreenBanner').classList.remove('show');
+  if (pendingScreen) { try{pendingScreen.close();}catch(e){} pendingScreen=null; }
+}
+
+/* ===== PWA Manifest ===== */
+const manifest = {
+  name:'Oilaviy Chat', short_name:'Chat',
+  start_url:'./', display:'standalone',
+  background_color:'#0f1923', theme_color:'#0f1923',
+  icons:[{
+    src:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231a9e72'/><text y='.9em' font-size='80' x='10'>🏠</text></svg>",
+    sizes:'192x192', type:'image/svg+xml'
+  }]
+};
+const blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
+document.getElementById('manifestLink').href = URL.createObjectURL(blob);
+
+let isMuted = false;
+
+function showCallOverlay(status, connected) {
+  const ov = document.getElementById('callOverlay');
+  const av = document.getElementById('overlayAvatar');
+  const nm = document.getElementById('overlayName');
+  const st = document.getElementById('overlayStatus');
+  const tm = document.getElementById('overlayTimer');
+  const avatarEl = document.getElementById('overlayAvatar');
+
+  if (myRole === 'me') {
+    av.textContent = '🇷🇺'; nm.textContent = 'Rossiyadaman';
+  } else {
+    av.textContent = '🇺🇿'; nm.textContent = "O'zbekistondaman";
+  }
+  st.textContent = status;
+  if (connected) {
+    avatarEl.classList.add('connected');
+    st.style.display = 'none';
+    tm.style.display = 'block';
+  } else {
+    avatarEl.classList.remove('connected');
+    st.style.display = 'block';
+    tm.style.display = 'none';
+  }
+  ov.classList.add('show');
+}
+
+function hideCallOverlay() {
+  document.getElementById('callOverlay').classList.remove('show');
+  document.getElementById('overlayAvatar').classList.remove('connected');
+  document.getElementById('overlayTimer').style.display = 'none';
+  document.getElementById('overlayStatus').style.display = 'block';
+}
+
+function showIncomingOverlay() {
+  const ov = document.getElementById('incomingOverlay');
+  if (myRole === 'me') {
+    document.getElementById('incomingAvatar').textContent = '🇷🇺';
+    document.getElementById('incomingName').textContent = 'Rossiyadaman';
+  } else {
+    document.getElementById('incomingAvatar').textContent = '🇺🇿';
+    document.getElementById('incomingName').textContent = "O'zbekistondaman";
+  }
+  ov.classList.add('show');
+}
+
+function hideIncomingOverlay() {
+  document.getElementById('incomingOverlay').classList.remove('show');
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  const btn = document.getElementById('muteBtn');
+  btn.textContent = isMuted ? '🔇' : '🎙️';
+  btn.classList.toggle('muted', isMuted);
+}
+
+function toggleSpeaker() {
+  const audio = document.getElementById('remoteAudio');
+  // On mobile, toggle between earpiece and speaker
+  const btn = document.getElementById('speakerBtn');
+  if (audio.volume === 0) {
+    audio.volume = 1;
+    btn.textContent = '🔊';
+    btn.classList.remove('muted');
+  } else {
+    audio.volume = 0;
+    btn.textContent = '🔕';
+    btn.classList.add('muted');
+  }
+}
+
+function exitChat() {
+  if (confirm("Suhbatni tugatmoqchimisiz?")) {
+    endCallManual();
+    stopScreenShare();
+    if (dataConn) { try{dataConn.close();}catch(e){} dataConn=null; }
+    if (peer) { try{peer.destroy();}catch(e){} peer=null; }
+    connected = false;
+    document.getElementById('chatScreen').style.display = 'none';
+    document.getElementById('roleScreen').style.display = 'flex';
+    document.getElementById('messages').innerHTML = '<div class="empty-state" id="emptyState"><div class="empty-icon">💬</div><p>Ulanish kutilmoqda...<br>Ikkalangiz ham shu sahifani ochib turing</p></div>';
+  }
+}
+
+// Mic permission
+async function requestMicPermission() {
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    localStream = s;
+    document.getElementById('micBanner').classList.remove('show');
+    document.getElementById('micInstructions').style.display = 'none';
+    sysMsg("✅ Mikrofonga ruxsat berildi!");
+    return;
+  } catch(e) {
+    // Show step-by-step instructions and open Chrome site settings
+    document.getElementById('micInstructions').style.display = 'block';
+    // Try to open Chrome site settings for this page directly
+    try {
+      window.open('chrome://settings/content/microphone', '_blank');
+    } catch(err) {}
+  }
+}
+
+function checkMicPermission() {
+  if (navigator.permissions) {
+    navigator.permissions.query({ name: 'microphone' }).then(result => {
+      if (result.state === 'denied') {
+        document.getElementById('micBanner').classList.add('show');
+      }
+      result.onchange = () => {
+        if (result.state === 'denied') {
+          document.getElementById('micBanner').classList.add('show');
+        } else {
+          document.getElementById('micBanner').classList.remove('show');
+        }
+      };
+    });
+  }
+}
+
+// Fullscreen screen share
+let isFullscreen = false;
+function toggleFullscreen() {
+  const area = document.getElementById('screenArea');
+  isFullscreen = !isFullscreen;
+  if (isFullscreen) {
+    area.classList.add('fullscreen');
+    // Try native fullscreen API
+    if (area.requestFullscreen) area.requestFullscreen().catch(()=>{});
+    else if (area.webkitRequestFullscreen) area.webkitRequestFullscreen();
+    // Lock to landscape
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(()=>{});
+    }
+  } else {
+    area.classList.remove('fullscreen');
+    if (document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    if (screen.orientation && screen.orientation.unlock) {
+      screen.orientation.unlock();
+    }
+  }
+}
+
+// Auto fullscreen on landscape rotation when screen is sharing
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    const area = document.getElementById('screenArea');
+    const isLandscape = window.innerWidth > window.innerHeight;
+    if (area.classList.contains('show') && isLandscape && !isFullscreen) {
+      toggleFullscreen();
+    } else if (!isLandscape && isFullscreen) {
+      toggleFullscreen();
+    }
+  }, 300);
+});
+
+// Also listen for screen orientation API
+if (screen.orientation) {
+  screen.orientation.addEventListener('change', () => {
+    const area = document.getElementById('screenArea');
+    const isLandscape = screen.orientation.type.includes('landscape');
+    if (area.classList.contains('show') && isLandscape && !isFullscreen) {
+      toggleFullscreen();
+    } else if (!isLandscape && isFullscreen) {
+      toggleFullscreen();
+    }
+  });
+}
+
+// Exit fullscreen when user presses back/Escape
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && isFullscreen) {
+    isFullscreen = false;
+    document.getElementById('screenArea').classList.remove('fullscreen');
+    if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+  }
+});
+</script>
+</body>
+</html>
