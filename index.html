@@ -723,14 +723,12 @@ function showCallUI() {
 
 /* ===== QUALITY SELECTOR ===== */
 const QUALITY_LEVELS = [
-  { w:256,  h:144,  fps:8,  label:'144p',  maxBitrate:  300_000 },
-  { w:426,  h:240,  fps:12, label:'240p',  maxBitrate:  600_000 },
-  { w:640,  h:360,  fps:15, label:'360p',  maxBitrate: 1_200_000 },
-  { w:854,  h:480,  fps:20, label:'480p',  maxBitrate: 2_000_000 },
+  { w:640,  h:360,  fps:15, label:'360p',  maxBitrate: 1_500_000 },
+  { w:854,  h:480,  fps:20, label:'480p',  maxBitrate: 2_500_000 },
   { w:1280, h:720,  fps:24, label:'720p',  maxBitrate: 4_000_000 },
   { w:1920, h:1080, fps:30, label:'1080p', maxBitrate: 8_000_000 },
 ];
-let currentQuality = 2; // 360p boshlang'ich
+let currentQuality = 0; // 360p boshlang'ich
 let isAutoQuality = true;
 let qualityInterval = null;
 
@@ -765,37 +763,34 @@ function updateQualityBtn() {
   btn.innerHTML = '&#9881; ' + (isAutoQuality ? 'Avto' : QUALITY_LEVELS[currentQuality].label);
 }
 
-// Sifatni majburan o'rnatish: constraints + RTCRtpSender bitrate
+// Sifatni o'zgartirish — ekranni qayta ochmaydi, faqat bitrate o'zgaradi
+// Asosiy ekran bir marta maksimal sifatda olinadi
 async function applyQualityLevel(level) {
-  if (!isSharing) return;
+  if (!isSharing || !screenCall || !screenCall.peerConnection) return;
 
-  // 1. Video trek constraints — capture sifatini o'zgartiradi
+  const pc = screenCall.peerConnection;
+
+  // RTCRtpSender orqali bitrate majburan o'rnatish
+  for (const sender of pc.getSenders()) {
+    if (!sender.track || sender.track.kind !== 'video') continue;
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+      params.encodings[0].maxBitrate       = level.maxBitrate;
+      params.encodings[0].scaleResolutionDownBy = 1.0;
+      await sender.setParameters(params);
+    } catch(e) {}
+
+    // contentHint — brauzerga matn/detail rejim
+    try { if ('contentHint' in sender.track) sender.track.contentHint = 'detail'; } catch(e) {}
+  }
+
+  // applyConstraints — frameRate va resolution hint
   if (localScreenStream) {
     const vt = localScreenStream.getVideoTracks()[0];
     if (vt) {
       try {
-        await vt.applyConstraints({
-          width:     { ideal: level.w },
-          height:    { ideal: level.h },
-          frameRate: { ideal: level.fps, max: level.fps }
-        });
-        // contentHint: matn/yozuv aniq ko'rinishi uchun
-        if ('contentHint' in vt) vt.contentHint = 'detail';
-      } catch(e) {}
-    }
-  }
-
-  // 2. WebRTC sender bitrate — siqishni kamaytiradi, matn aniq chiqadi
-  if (screenCall && screenCall.peerConnection) {
-    const senders = screenCall.peerConnection.getSenders();
-    for (const sender of senders) {
-      if (!sender.track || sender.track.kind !== 'video') continue;
-      try {
-        const params = sender.getParameters();
-        if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
-        params.encodings[0].maxBitrate = level.maxBitrate;
-        params.encodings[0].scaleResolutionDownBy = 1.0;
-        await sender.setParameters(params);
+        await vt.applyConstraints({ frameRate: { ideal: level.fps, max: level.fps } });
       } catch(e) {}
     }
   }
@@ -803,7 +798,6 @@ async function applyQualityLevel(level) {
   sysMsg('Sifat: ' + level.label);
 }
 
-// Eski nom bilan ham ishlashi uchun (avto rejim chaqiradi)
 async function restartScreenWithQuality(level) {
   await applyQualityLevel(level);
 }
@@ -838,10 +832,9 @@ function startAdaptiveQuality() {
       const kbps = ((bytes - lastBytes) * 8) / ((now - lastTime)/1000) / 1000;
       lastBytes = bytes; lastTime = now;
       let t = currentQuality;
-      if      (kbps > 2500 && t < QUALITY_LEVELS.length-1) t++;
-      else if (kbps > 1200 && t < 3) t++;
-      else if (kbps < 200  && t > 0) t--;
-      else if (kbps < 600  && t > 1) t--;
+      if      (kbps > 4000 && t < QUALITY_LEVELS.length-1) t++;
+      else if (kbps > 2000 && t < 2) t++;
+      else if (kbps < 800  && t > 0) t--;
       if (t !== currentQuality) {
         currentQuality = t;
         updateQualityBtn();
@@ -858,12 +851,16 @@ async function toggleScreen() {
 }
 
 async function startScreenShare() {
-  const startLevel = QUALITY_LEVELS[currentQuality];
   try {
+    // Har doim maksimal sifatda ol — keyin bitrate bilan cheklaymiz
     localScreenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { width:{ideal:startLevel.w}, height:{ideal:startLevel.h}, frameRate:{ideal:startLevel.fps}, cursor:'always' },
+      video: { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30}, cursor:'always' },
       audio: { echoCancellation: true, noiseSuppression: true }
     });
+
+    // contentHint — matn aniq ko'rinsin
+    const vt = localScreenStream.getVideoTracks()[0];
+    if (vt && 'contentHint' in vt) vt.contentHint = 'detail';
 
     isSharing = true;
     const sb = document.getElementById('screenBtn');
@@ -880,14 +877,12 @@ async function startScreenShare() {
     screenCall.on('close', () => { if (isSharing) stopScreenShare(); });
     localScreenStream.getVideoTracks()[0].onended = () => stopScreenShare();
 
-    // Boshlang'ich bitrate o'rnatish
-    if (screenCall) {
-      // PeerJS connection o'rnatilgach encoder parametrlarini sozlash
-      setTimeout(() => applyQualityLevel(startLevel), 2000);
-    }
+    // PeerJS ulanishi o'rnatilgach boshlang'ich bitrate qo'llash
+    setTimeout(() => applyQualityLevel(QUALITY_LEVELS[currentQuality]), 1500);
+
     if (isAutoQuality) startAdaptiveQuality();
     updateQualityBtn();
-    sysMsg('Ekran ulashish boshlandi (' + (isAutoQuality ? 'Avto' : startLevel.label) + ')');
+    sysMsg('Ekran ulashish boshlandi (' + (isAutoQuality ? 'Avto' : QUALITY_LEVELS[currentQuality].label) + ')');
   } catch(e) {
     if (e.name !== 'NotAllowedError') sysMsg('Ekran ulashishda xato.');
   }
