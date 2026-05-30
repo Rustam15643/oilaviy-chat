@@ -1282,49 +1282,35 @@ function toggleVidCam() {
 
 async function flipCamera() {
   if (!localVideoStream || !videoCall) return;
-  // Yangi facingMode — exact ishlatamiz, brauzer e'tiborsiz qoldirmasin
   const nextFacing = facingMode === 'user' ? 'environment' : 'user';
   try {
-    // Faqat video track — audio eski streamdan saqlanadi (blokirovka yo'q)
-    const newVideoStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { exact: nextFacing }, width:{ideal:640}, height:{ideal:480} },
+    // Yangi video track ol (audio yo'q)
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: nextFacing, width:{ideal:640}, height:{ideal:480} },
       audio: false
     });
-    const newVideoTrack = newVideoStream.getVideoTracks()[0];
+    const newTrack = newStream.getVideoTracks()[0];
 
-    // WebRTC ga yangi track yuborish
-    if (videoCall && videoCall.peerConnection) {
-      const sender = videoCall.peerConnection.getSenders().find(s => s.track && s.track.kind==='video');
-      if (sender) await sender.replaceTrack(newVideoTrack);
+    // Avval sender ga yangi track yubor — shunda qora ekran bo'lmaydi
+    if (videoCall.peerConnection) {
+      const sender = videoCall.peerConnection.getSenders()
+        .find(s => s.track && s.track.kind === 'video');
+      if (sender) await sender.replaceTrack(newTrack);
     }
 
-    // Eski video treklarni to'xtat, yangi track ni stream ga qo'sh
+    // Eski video trackni to'xtat
     localVideoStream.getVideoTracks().forEach(t => t.stop());
-    localVideoStream.removeTrack(localVideoStream.getVideoTracks()[0]);
-    localVideoStream.addTrack(newVideoTrack);
 
-    // Preview yangilash
+    // Localvideoʼga yangi stream — faqat video
+    // Audio track eski streamdan olamiz
+    const audioTracks = localVideoStream.getAudioTracks();
+    const combined = new MediaStream([newTrack, ...audioTracks]);
+    localVideoStream = combined;
     document.getElementById('localVideo').srcObject = localVideoStream;
 
     facingMode = nextFacing;
   } catch(e) {
-    // exact ishlamasa oddiy usul bilan urinish
-    try {
-      const newVideoStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: nextFacing, width:{ideal:640}, height:{ideal:480} },
-        audio: false
-      });
-      const newVideoTrack = newVideoStream.getVideoTracks()[0];
-      if (videoCall && videoCall.peerConnection) {
-        const sender = videoCall.peerConnection.getSenders().find(s => s.track && s.track.kind==='video');
-        if (sender) await sender.replaceTrack(newVideoTrack);
-      }
-      localVideoStream.getVideoTracks().forEach(t => t.stop());
-      localVideoStream.removeTrack(localVideoStream.getVideoTracks()[0]);
-      localVideoStream.addTrack(newVideoTrack);
-      document.getElementById('localVideo').srcObject = localVideoStream;
-      facingMode = nextFacing;
-    } catch(e2) {}
+    sysMsg("Kamerani aylantirib bo'lmadi.");
   }
 }
 
