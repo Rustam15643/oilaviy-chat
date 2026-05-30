@@ -563,7 +563,7 @@ body {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
 <script>
-const ROOM = location.hash.slice(1) || Math.random().toString(36).slice(2);
+const ROOM = location.hash.slice(1) || 'oila2024';
 const IDS = { me: ROOM+'-OPA', sister: ROOM+'-SIN' };
 
 let myRole=null, peer=null, dataConn=null, mediaCall=null, screenCall=null;
@@ -660,11 +660,20 @@ function initPeer() {
 function tryConnect() {
   clearTimeout(retryTimer);
   if (!peer || peer.destroyed) { initPeer(); return; }
-  const conn = peer.connect(theirId(), { reliable:true, serialization:'json' });
-  setupData(conn);
+  // Faqat 'me' (O'zbekiston) ulanish boshlaydi, 'sister' kutadi
+  // Bu ikki tomonlama ulanish konfliktini oldini oladi
+  if (myRole === 'me') {
+    const conn = peer.connect(theirId(), { reliable:true, serialization:'json' });
+    setupData(conn);
+  }
+  // 'sister' uchun peer.on('connection') orqali kelgan ulanish qabul qilinadi
 }
 
 function setupData(conn) {
+  // Eski ulanishni yop
+  if (dataConn && dataConn !== conn) {
+    try { dataConn.close(); } catch(e) {}
+  }
   dataConn = conn;
   conn.on('open', () => {
     connected=true; clearTimeout(retryTimer);
