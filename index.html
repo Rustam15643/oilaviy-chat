@@ -1284,29 +1284,30 @@ async function flipCamera() {
   if (!localVideoStream || !videoCall) return;
   const nextFacing = facingMode === 'user' ? 'environment' : 'user';
   try {
-    // Yangi video track ol (audio yo'q)
+    // 1. Avval audio treklarni saqlab ol (to'xtatilmasdan oldin)
+    const audioTracks = localVideoStream.getAudioTracks();
+
+    // 2. Yangi kamera stream ol
     const newStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: nextFacing, width:{ideal:640}, height:{ideal:480} },
       audio: false
     });
     const newTrack = newStream.getVideoTracks()[0];
+    if (!newTrack) { sysMsg("Orqa kamera topilmadi."); return; }
 
-    // Avval sender ga yangi track yubor — shunda qora ekran bo'lmaydi
+    // 3. Eski video treklarni to'xtat
+    localVideoStream.getVideoTracks().forEach(t => t.stop());
+
+    // 4. Yangi combined stream yasash
+    localVideoStream = new MediaStream([newTrack, ...audioTracks]);
+    document.getElementById('localVideo').srcObject = localVideoStream;
+
+    // 5. WebRTC ga yangi track yuborish
     if (videoCall.peerConnection) {
       const sender = videoCall.peerConnection.getSenders()
         .find(s => s.track && s.track.kind === 'video');
       if (sender) await sender.replaceTrack(newTrack);
     }
-
-    // Eski video trackni to'xtat
-    localVideoStream.getVideoTracks().forEach(t => t.stop());
-
-    // Localvideoʼga yangi stream — faqat video
-    // Audio track eski streamdan olamiz
-    const audioTracks = localVideoStream.getAudioTracks();
-    const combined = new MediaStream([newTrack, ...audioTracks]);
-    localVideoStream = combined;
-    document.getElementById('localVideo').srcObject = localVideoStream;
 
     facingMode = nextFacing;
   } catch(e) {
