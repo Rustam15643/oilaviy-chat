@@ -342,7 +342,6 @@ body {
 .vid-btn-mic.muted { background: rgba(255,255,255,0.4); }
 .vid-btn-cam  { background: rgba(255,255,255,0.2); }
 .vid-btn-cam.off { background: rgba(255,255,255,0.4); }
-.vid-btn-flip { background: rgba(255,255,255,0.2); }
 .vid-btn-end  { background: #e53935; }
 #noRemoteVideo {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
@@ -484,10 +483,7 @@ body {
         <button class="call-big-btn btn-hangup" onclick="endCallManual()">📵</button>
         <span class="call-btn-lbl">Tugatish</span>
       </div>
-      <div class="call-btn-wrap">
-        <button class="call-big-btn btn-mute" id="speakerBtn" onclick="toggleSpeaker()">🔊</button>
-        <span class="call-btn-lbl">Ovozdon</span>
-      </div>
+
     </div>
   </div>
 
@@ -1072,6 +1068,7 @@ function showCallOverlay(status, connected) {
   const tm = document.getElementById('overlayTimer');
   const avatarEl = document.getElementById('overlayAvatar');
 
+  // Qarama-qarshi tomonning bayrog'i ko'rsatiladi
   if (myRole === 'me') {
     av.textContent = '🇷🇺'; nm.textContent = 'Rossiyadaman';
   } else {
@@ -1099,6 +1096,7 @@ function hideCallOverlay() {
 
 function showIncomingOverlay() {
   const ov = document.getElementById('incomingOverlay');
+  // Kiruvchi qo'ng'iroq — qarama-qarshi tomonning bayrog'i
   if (myRole === 'me') {
     document.getElementById('incomingAvatar').textContent = '🇷🇺';
     document.getElementById('incomingName').textContent = 'Rossiyadaman';
@@ -1121,34 +1119,21 @@ function toggleMute() {
   btn.classList.toggle('muted', isMuted);
 }
 
-function toggleSpeaker() {
-  const audio = document.getElementById('remoteAudio');
-  // On mobile, toggle between earpiece and speaker
-  const btn = document.getElementById('speakerBtn');
-  if (audio.volume === 0) {
-    audio.volume = 1;
-    btn.textContent = '🔊';
-    btn.classList.remove('muted');
-  } else {
-    audio.volume = 0;
-    btn.textContent = '🔕';
-    btn.classList.add('muted');
-  }
-}
+
 
 /* ===== VIDEO CALL ===== */
 let videoCall = null, localVideoStream = null, pendingVideoCall = null;
 let videoSec = 0, videoTick = null, vidMuted = false, vidCamOff = false;
 
 function setVideoNames() {
-  const isMe = myRole === 'me';
-  const flag = isMe ? '🇷🇺' : '🇺🇿';
-  const name = isMe ? 'Rossiyadaman' : "O'zbekistondaman";
-  document.getElementById('videoAvatar').textContent = flag;
-  document.getElementById('videoName').textContent = name;
-  document.getElementById('videoTopName').textContent = name;
-  document.getElementById('incomingVideoAvatar').textContent = flag;
-  document.getElementById('incomingVideoName').textContent = name;
+  // Qarama-qarshi tomonning ismi va bayrog'i ko'rsatiladi
+  const theirFlag = myRole === 'me' ? '🇷🇺' : '🇺🇿';
+  const theirName = myRole === 'me' ? 'Rossiyadaman' : "O'zbekistondaman";
+  document.getElementById('videoAvatar').textContent = theirFlag;
+  document.getElementById('videoName').textContent = theirName;
+  document.getElementById('videoTopName').textContent = theirName;
+  document.getElementById('incomingVideoAvatar').textContent = theirFlag;
+  document.getElementById('incomingVideoName').textContent = theirName;
 }
 
 async function toggleVideoCall() {
@@ -1285,6 +1270,7 @@ function exitChat() {
     if (dataConn) { try{dataConn.close();}catch(e){} dataConn=null; }
     if (peer) { try{peer.destroy();}catch(e){} peer=null; }
     connected = false;
+    if (isFullscreen) toggleFullscreen();
     document.getElementById('chatScreen').style.display = 'none';
     document.getElementById('roleScreen').style.display = 'flex';
     document.getElementById('messages').innerHTML = '<div class="empty-state" id="emptyState"><div class="empty-icon">💬</div><p>Ulanish kutilmoqda...<br>Ikkalangiz ham shu sahifani ochib turing</p></div>';
@@ -1303,10 +1289,7 @@ async function requestMicPermission() {
   } catch(e) {
     // Show step-by-step instructions and open Chrome site settings
     document.getElementById('micInstructions').style.display = 'block';
-    // Try to open Chrome site settings for this page directly
-    try {
-      window.open('chrome://settings/content/microphone', '_blank');
-    } catch(err) {}
+
   }
 }
 
